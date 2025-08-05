@@ -1,6 +1,6 @@
 // Data siswa
 const students = [
-  { id: "001", name: "AFDAL IBRAHIM", barcode: "STD001" },
+{ id: "001", name: "AFDAL IBRAHIM", barcode: "STD001" },
 { id: "002", name: "AFDIL SETIYAWAN IBRAHIM", barcode: "STD002" },
 { id: "003", name: "ALFI ISMAIL", barcode: "STD003" },
 { id: "004", name: "BALGIS R. GUBALI", barcode: "STD004" },
@@ -72,34 +72,26 @@ function initAttendanceData() {
 
 // Fungsi utama
 function startScanning() {
-  if (isScanning) return;
-
   const readerElement = document.getElementById('reader');
-  readerElement.classList.remove('hidden');
   
-  html5QrcodeScanner = new Html5Qrcode("reader");
-  
-  const config = {
-    fps: 10,
-    qrbox: { width: 250, height: 250 },
-    aspectRatio: 1.0
-  };
-
-  html5QrcodeScanner.start(
-    { facingMode: "environment" },
-    config,
-    onScanSuccess,
-    onScanFailure
-  ).then(() => {
-    isScanning = true;
-    toggleScanButtons(true);
-    readerElement.classList.add('scan-animation');
-  }).catch(err => {
-    console.error('Error starting scanner:', err);
-    showResultMessage('❌ Gagal memulai scanner. Pastikan kamera diizinkan.', 'error');
-  });
+  Html5Qrcode.getCameras().then(devices => {
+    if (devices && devices.length) {
+      const scanner = new Html5Qrcode("reader");
+      scanner.start(
+        devices[0].id, 
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 }
+        },
+        qrCodeMessage => {
+          console.log("QR Code detected:", qrCodeMessage);
+          scanner.stop();
+        },
+        errorMessage => console.warn("QR Scan error:", errorMessage)
+      ).catch(err => console.error("Unable to start scanner:", err));
+    }
+  }).catch(err => console.error("Camera access error:", err));
 }
-
 function stopScanning() {
   if (!isScanning || !html5QrcodeScanner) return;
 

@@ -70,47 +70,62 @@ function initAttendanceData() {
   }
 }
 
-// Fungsi utama
+// Fungsi utama yang diperbaiki
 function startScanning() {
+  if (isScanning) return;
+  
   const readerElement = document.getElementById('reader');
+  readerElement.classList.remove('hidden');
+  toggleScanButtons(true);
   
   Html5Qrcode.getCameras().then(devices => {
     if (devices && devices.length) {
-      const scanner = new Html5Qrcode("reader");
-      scanner.start(
+      html5QrcodeScanner = new Html5Qrcode("reader");
+      isScanning = true;
+      
+      html5QrcodeScanner.start(
         devices[0].id, 
         {
           fps: 10,
           qrbox: { width: 250, height: 250 }
         },
-        qrCodeMessage => {
-          console.log("QR Code detected:", qrCodeMessage);
-          scanner.stop();
+        decodedText => {
+          onScanSuccess(decodedText);
+          html5QrcodeScanner.stop().then(() => {
+            isScanning = false;
+            toggleScanButtons(false);
+          });
         },
-        errorMessage => console.warn("QR Scan error:", errorMessage)
-      ).catch(err => console.error("Unable to start scanner:", err));
+        errorMessage => {
+          console.warn("QR Scan error:", errorMessage);
+          isScanning = false;
+          toggleScanButtons(false);
+        }
+      ).catch(err => {
+        console.error("Unable to start scanner:", err);
+        isScanning = false;
+        toggleScanButtons(false);
+      });
     }
-  }).catch(err => console.error("Camera access error:", err));
+  }).catch(err => {
+    console.error("Camera access error:", err);
+    isScanning = false;
+    toggleScanButtons(false);
+    showResultMessage('Error: Akses kamera ditolak', 'error');
+  });
 }
+
 function stopScanning() {
   if (!isScanning || !html5QrcodeScanner) return;
-
+  
   html5QrcodeScanner.stop().then(() => {
     isScanning = false;
     toggleScanButtons(false);
-    document.getElementById('reader').classList.remove('scan-animation');
+    document.getElementById('reader').classList.add('hidden');
   }).catch(err => {
     console.error('Error stopping scanner:', err);
   });
 }
-
-function onScanSuccess(decodedText) {
-  const student = students.find(s => s.barcode === decodedText);
-  
-  if (!student) {
-    showResultMessage('❌ Barcode tidak dikenali!', 'error');
-    return;
-  }
 
   // Jika sudah absen
   if (attendanceData[currentDate][student.barcode]) {

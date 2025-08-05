@@ -1,0 +1,354 @@
+// Data siswa
+const students = [
+  { id: "001", name: "Ahmad Rizki", barcode: "STD001" },
+  { id: "002", name: "Siti Nurhaliza", barcode: "STD002" },
+  { id: "003", name: "Budi Santoso", barcode: "STD003" },
+  { id: "004", name: "Dewi Sartika", barcode: "STD004" },
+  { id: "005", name: "Eko Prasetyo", barcode: "STD005" }
+];
+
+// Struktur data absensi
+let attendanceData = {};
+let currentDate = new Date().toISOString().split('T')[0]; // Format YYYY-MM-DD
+let html5QrcodeScanner = null;
+let isScanning = false;
+
+// Inisialisasi aplikasi
+document.addEventListener('DOMContentLoaded', function() {
+  initDatePicker();
+  initAttendanceData();
+  renderStudentList();
+  updateStatistics();
+  setupEventListeners();
+});
+
+// Fungsi inisialisasi
+function initDatePicker() {
+  const dateInput = document.getElementById('attendanceDate');
+  dateInput.value = currentDate;
+  dateInput.max = currentDate; // Tidak boleh memilih tanggal setelah hari ini
+  
+  // Format tampilan tanggal
+  document.getElementById('currentDate').textContent = formatIndonesianDate(currentDate);
+}
+
+function initAttendanceData() {
+  // Cek localStorage untuk data yang sudah tersimpan
+  const savedData = localStorage.getItem('attendanceData');
+  if (savedData) {
+    attendanceData = JSON.parse(savedData);
+  }
+  
+  // Inisialisasi jika belum ada data untuk tanggal terpilih
+  if (!attendanceData[currentDate]) {
+    attendanceData[currentDate] = {};
+  }
+}
+
+// Fungsi utama
+function startScanning() {
+  if (isScanning) return;
+
+  const readerElement = document.getElementById('reader');
+  readerElement.classList.remove('hidden');
+  
+  html5QrcodeScanner = new Html5Qrcode("reader");
+  
+  const config = {
+    fps: 10,
+    qrbox: { width: 250, height: 250 },
+    aspectRatio: 1.0
+  };
+
+  html5QrcodeScanner.start(
+    { facingMode: "environment" },
+    config,
+    onScanSuccess,
+    onScanFailure
+  ).then(() => {
+    isScanning = true;
+    toggleScanButtons(true);
+    readerElement.classList.add('scan-animation');
+  }).catch(err => {
+    console.error('Error starting scanner:', err);
+    showResultMessage('❌ Gagal memulai scanner. Pastikan kamera diizinkan.', 'error');
+  });
+}
+
+function stopScanning() {
+  if (!isScanning || !html5QrcodeScanner) return;
+
+  html5QrcodeScanner.stop().then(() => {
+    isScanning = false;
+    toggleScanButtons(false);
+    document.getElementById('reader').classList.remove('scan-animation');
+  }).catch(err => {
+    console.error('Error stopping scanner:', err);
+  });
+}
+
+function onScanSuccess(decodedText) {
+  const student = students.find(s => s.barcode === decodedText);
+  
+  if (!student) {
+    showResultMessage('❌ Barcode tidak dikenali!', 'error');
+    return;
+  }
+
+  // Jika sudah absen
+  if (attendanceData[currentDate][student.barcode]) {
+    showResultMessage(`⚠️ ${student.name} sudah absen hari ini!`, 'warning');
+    return;
+  }
+
+  // Catat absensi
+  recordAttendance(student.barcode, '1');
+  showResultMessage(`✅ ${student.name} berhasil absen!`, 'success');
+  
+  // Auto stop setelah 2 detik
+  setTimeout(stopScanning, 2000);
+}
+
+function recordAttendance(barcode, status) {
+  if (!attendanceData[currentDate]) {
+    attendanceData[currentDate] = {};
+  }
+  
+  attendanceData[currentDate][barcode] = { 
+    status: status,
+    timestamp: new Date().toISOString() 
+  };
+  
+  // Simpan ke localStorage
+  localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
+  
+  renderStudentList();
+  updateStatistics();
+}
+
+// Fungsi tampilan
+function renderStudentList() {
+  const listContainer = document.getElementById('studentList');
+  listContainer.innerHTML = '';
+
+  const todayAttendance = attendanceData[currentDate] || {};
+
+  students.forEach(student => {
+    const statusInfo = todayAttendance[student.barcode] || { status: 'A' };
+    const statusClass = getStatusClass(statusInfo.status);
+    const statusText = getStatusText(statusInfo.status);
+    
+    const studentElement = document.createElement('div');
+    studentElement.className = `student-item ${statusClass}`;
+    studentElement.innerHTML = `
+      <div class="student-info">
+        <div>
+          <div class="student-name">${student.name}</div>
+          <div class="student-id">ID: ${student.id} | Barcode: ${student.barcode}</div>
+        </div>
+        <div>
+          <span class="status-badge ${statusClass}">${statusText}</span>
+          <select class="status-select" data-barcode="${student.barcode}">
+            <option value="1" ${statusInfo.status === '1' ? 'selected' : ''}>Hadir</option>
+            <option value="A" ${statusInfo.status === 'A' ? 'selected' : ''}>Alpa</option>
+            <option value="S" ${statusInfo.status === 'S' ? 'selected' : ''}>Sakit</option>
+            <option value="I" ${statusInfo.status === 'I' ? 'selected' : ''}>Izin</option>
+          </select>
+        </div>
+      </div>
+    `;
+    
+    listContainer.appendChild(studentElement);
+  });
+
+  // Set event listeners untuk dropdown
+  document.querySelectorAll('.status-select').forEach(select => {
+    select.addEventListener('change', function() {
+      const barcode = this.dataset.barcode;
+      recordAttendance(barcode, this.value);
+    });
+  });
+}
+
+function updateStatistics() {
+  const todayAttendance = attendanceData[currentDate] || {};
+  let present = 0, absent = 0, sick = 0, permission = 0;
+
+  students.forEach(student => {
+    const status = todayAttendance[student.barcode]?.status || 'A';
+    switch(status) {
+      case '1': present++; break;
+      case 'A': absent++; break;
+      case 'S': sick++; break;
+      case 'I': permission++; break;
+    }
+  });
+
+  document.getElementById('totalStudents').textContent = students.length;
+  document.getElementById('presentCount').textContent = present;
+  document.getElementById('absentCount').textContent = absent;
+  document.getElementById('sickCount').textContent = sick;
+  document.getElementById('permissionCount').textContent = permission;
+}
+
+// Fungsi utilitas
+function getStatusClass(status) {
+  const statusClasses = {
+    '1': 'present',
+    'A': 'absent',
+    'S': 'sick',
+    'I': 'permission'
+  };
+  return statusClasses[status] || '';
+}
+
+function getStatusText(status) {
+  const statusTexts = {
+    '1': '✅ Hadir',
+    'A': '❌ Alpa',
+    'S': '🤒 Sakit',
+    'I': '📝 Izin'
+  };
+  return statusTexts[status] || '❓ Unknown';
+}
+
+function formatIndonesianDate(dateStr) {
+  const date = new Date(dateStr);
+  const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+  return date.toLocaleDateString('id-ID', options);
+}
+
+function showResultMessage(message, type) {
+  const resultDiv = document.getElementById('scanResult');
+  const messageP = resultDiv.querySelector('.result-text');
+  
+  messageP.textContent = message;
+  resultDiv.className = `result-${type}`;
+  resultDiv.classList.remove('hidden');
+  
+  setTimeout(() => {
+    resultDiv.classList.add('hidden');
+  }, 3000);
+}
+
+function toggleScanButtons(isScanning) {
+  document.getElementById('startScanBtn').classList.toggle('hidden', isScanning);
+  document.getElementById('stopScanBtn').classList.toggle('hidden', !isScanning);
+}
+
+// Event Listeners
+function setupEventListeners() {
+  // Tombol scanner
+  document.getElementById('startScanBtn').addEventListener('click', startScanning);
+  document.getElementById('stopScanBtn').addEventListener('click', stopScanning);
+  
+  // Tombol ganti tanggal
+  document.getElementById('changeDateBtn').addEventListener('click', function() {
+    const newDate = document.getElementById('attendanceDate').value;
+    if (newDate !== currentDate) {
+      currentDate = newDate;
+      document.getElementById('currentDate').textContent = formatIndonesianDate(currentDate);
+      
+      // Inisialisasi data jika belum ada
+      if (!attendanceData[currentDate]) {
+        attendanceData[currentDate] = {};
+      }
+      
+      renderStudentList();
+      updateStatistics();
+      showResultMessage(`Tanggal absensi diubah ke: ${formatIndonesianDate(currentDate)}`, 'success');
+    }
+  });
+  
+  // Tombol export
+  document.getElementById('exportBtn').addEventListener('click', exportAttendanceData);
+}
+
+// Fungsi export
+function exportAttendanceData() {
+  const wb = XLSX.utils.book_new();
+  
+  // Sheet 1: Rekap Harian
+  const dailyData = [
+    ["REKAP ABSENSI HARIAN"],
+    [`Kelas: XII IPA 1 | Tanggal: ${formatIndonesianDate(currentDate)}`],
+    [],
+    ["No", "Nama Siswa", "ID", "Barcode", "Status", "Waktu Absen"]
+  ];
+
+  const todayRecords = attendanceData[currentDate] || {};
+  
+  students.forEach((student, index) => {
+    const record = todayRecords[student.barcode] || { status: 'A' };
+    dailyData.push([
+      index + 1,
+      student.name,
+      student.id,
+      student.barcode,
+      getStatusText(record.status).replace(/[^a-zA-Z]/g, ''),
+      record.timestamp ? new Date(record.timestamp).toLocaleTimeString('id-ID') : '-'
+    ]);
+  });
+
+  // Sheet 2: Rekap Bulanan
+  const month = new Date(currentDate).toLocaleString('id-ID', { month: 'long' });
+  const year = new Date(currentDate).getFullYear();
+  
+  const monthlyData = [
+    ["REKAP BULANAN ABSENSI"],
+    [`Kelas: XII IPA 1 | Bulan: ${month} ${year}`],
+    [],
+    ["No", "Nama Siswa", "ID", "Hadir", "Alpa", "Sakit", "Izin", "Persentase"]
+  ];
+
+  students.forEach((student, index) => {
+    const stats = calculateMonthlyStats(student.barcode, month, year);
+    monthlyData.push([
+      index + 1,
+      student.name,
+      student.id,
+      stats.present,
+      stats.absent,
+      stats.sick,
+      stats.permission,
+      `${Math.round((stats.present / stats.total) * 100)}%`
+    ]);
+  });
+
+  const wsDaily = XLSX.utils.aoa_to_sheet(dailyData);
+  const wsMonthly = XLSX.utils.aoa_to_sheet(monthlyData);
+  
+  XLSX.utils.book_append_sheet(wb, wsDaily, "Rekap Harian");
+  XLSX.utils.book_append_sheet(wb, wsMonthly, "Rekap Bulanan");
+  
+  const fileName = `Absensi_${currentDate.replace(/-/g, '')}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+  
+  showResultMessage(`📊 Data berhasil diekspor ke ${fileName}`, 'success');
+}
+
+function calculateMonthlyStats(barcode, month, year) {
+  let present = 0, absent = 0, sick = 0, permission = 0;
+  const targetMonth = new Date(`${month} 1, ${year}`).getMonth();
+
+  Object.entries(attendanceData).forEach(([date, records]) => {
+    const recordDate = new Date(date);
+    if (recordDate.getMonth() === targetMonth && recordDate.getFullYear() == year) {
+      const status = records[barcode]?.status || 'A';
+      switch(status) {
+        case '1': present++; break;
+        case 'A': absent++; break;
+        case 'S': sick++; break;
+        case 'I': permission++; break;
+      }
+    }
+  });
+
+  return {
+    present,
+    absent,
+    sick,
+    permission,
+    total: present + absent + sick + permission
+  };
+}

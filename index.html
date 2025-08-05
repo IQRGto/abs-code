@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Absensi Kelas - Barcode Scanner</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
+</head>
+<body class="bg-gray-50">
+    <div class="container">
+        <!-- Header -->
+        <header class="attendance-card">
+            <h1>📚 Absensi Kelas</h1>
+            <p class="subtitle">Scan barcode</p>
+            <div class="info-row">
+                <span>Kelas: <strong id="className">XII IPA 1</strong></span>
+                <span>Tanggal: <strong id="currentDate"></strong></span>
+            </div>
+            <div class="date-picker">
+                <label for="attendanceDate">Tanggal Absensi:</label>
+                <input type="date" id="attendanceDate" class="date-input">
+                <button id="changeDateBtn" class="btn-date">Ganti Tanggal</button>
+            </div>
+        </header>
+
+        <!-- Scanner Section -->
+        <main class="scanner-section">
+            <div class="scanner-header">
+                <h2>Scanner Barcode</h2>
+                <div class="button-group">
+                    <button id="startScanBtn" class="btn-scan">
+                        📷 Mulai Scan
+                    </button>
+                    <button id="stopScanBtn" class="btn-stop hidden">
+                        ⏹️ Stop Scan
+                    </button>
+                </div>
+            </div>
+            
+            <div class="scanner-container">
+                <div id="reader" class="hidden"></div>
+            </div>
+            
+            <div id="scanResult" class="hidden">
+                <p class="result-text"></p>
+            </div>
+        </main>
+
+        <!-- Statistics -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-number" id="totalStudents">0</div>
+                <div class="stat-label">Total Siswa</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number text-green" id="presentCount">0</div>
+                <div class="stat-label">Hadir</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number text-red" id="absentCount">0</div>
+                <div class="stat-label">Alpa</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number text-orange" id="sickCount">0</div>
+                <div class="stat-label">Sakit</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number text-blue" id="permissionCount">0</div>
+                <div class="stat-label">Izin</div>
+            </div>
+        </div>
+
+        <!-- Student List -->
+        <div class="student-list">
+            <h3>📋 Daftar Siswa</h3>
+            <div id="studentList" class="students-container"></div>
+        </div>
+
+        <!-- Export Button -->
+        <div class="export-section">
+            <button id="exportBtn" class="btn-export">
+                📊 Export Excel
+            </button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

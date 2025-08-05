@@ -78,10 +78,15 @@ function startScanning() {
   readerElement.classList.remove('hidden');
   toggleScanButtons(true);
   
+function startScanning() {
   Html5Qrcode.getCameras().then(devices => {
-    if (devices && devices.length) {
-      html5QrcodeScanner = new Html5Qrcode("reader");
-      isScanning = true;
+    if (!devices.length) throw new Error("No camera found");
+    // ... kode scan
+  }).catch(err => {
+    console.error("Camera error:", err);
+    alert("Tidak dapat mengakses kamera: " + err.message);
+  });
+}
       
       html5QrcodeScanner.start(
         devices[0].id, 

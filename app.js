@@ -32,10 +32,11 @@ const students = [
 { id: "030", name: "REVALINA LAGANI", barcode: "STD030" },
 ];
 
+
 // Struktur data absensi
 let attendanceData = {};
 let currentDate = new Date().toISOString().split('T')[0]; // Format YYYY-MM-DD
-let html5QrcodeScanner = null;
+let html5QrCodeScanner = null;
 let isScanning = false;
 
 // Inisialisasi aplikasi
@@ -70,80 +71,74 @@ function initAttendanceData() {
   }
 }
 
-// Fungsi utama yang diperbaiki
+// Fungsi Scanner
 function startScanning() {
   if (isScanning) return;
-  
+
   const readerElement = document.getElementById('reader');
   readerElement.classList.remove('hidden');
-  toggleScanButtons(true);
   
-function startScanning() {
-  Html5Qrcode.getCameras().then(devices => {
-    if (!devices.length) throw new Error("No camera found");
-    // ... kode scan
+  html5QrCodeScanner = new Html5Qrcode("reader");
+  
+  const config = {
+    fps: 10,
+    qrbox: { width: 250, height: 250 },
+    aspectRatio: 1.0
+  };
+
+  html5QrCodeScanner.start(
+    { facingMode: "environment" }, // Use back camera
+    config,
+    onScanSuccess,
+    onScanFailure
+  ).then(() => {
+    isScanning = true;
+    document.getElementById('startScanBtn').classList.add('hidden');
+    document.getElementById('stopScanBtn').classList.remove('hidden');
+    readerElement.classList.add('scan-animation');
   }).catch(err => {
-    console.error("Camera error:", err);
-    alert("Tidak dapat mengakses kamera: " + err.message);
-  });
-}
-      
-      html5QrcodeScanner.start(
-        devices[0].id, 
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 }
-        },
-        decodedText => {
-          onScanSuccess(decodedText);
-          html5QrcodeScanner.stop().then(() => {
-            isScanning = false;
-            toggleScanButtons(false);
-          });
-        },
-        errorMessage => {
-          console.warn("QR Scan error:", errorMessage);
-          isScanning = false;
-          toggleScanButtons(false);
-        }
-      ).catch(err => {
-        console.error("Unable to start scanner:", err);
-        isScanning = false;
-        toggleScanButtons(false);
-      });
-    }
-  }).catch(err => {
-    console.error("Camera access error:", err);
-    isScanning = false;
-    toggleScanButtons(false);
-    showResultMessage('Error: Akses kamera ditolak', 'error');
+    console.error('Error starting scanner:', err);
+    showResultMessage('❌ Gagal memulai scanner. Pastikan kamera diizinkan.', 'error');
   });
 }
 
 function stopScanning() {
-  if (!isScanning || !html5QrcodeScanner) return;
-  
-  html5QrcodeScanner.stop().then(() => {
+  if (!isScanning || !html5QrCodeScanner) return;
+
+  html5QrCodeScanner.stop().then(() => {
     isScanning = false;
-    toggleScanButtons(false);
     document.getElementById('reader').classList.add('hidden');
+    document.getElementById('reader').classList.remove('scan-animation');
+    document.getElementById('startScanBtn').classList.remove('hidden');
+    document.getElementById('stopScanBtn').classList.add('hidden');
   }).catch(err => {
     console.error('Error stopping scanner:', err);
   });
 }
 
-  // Jika sudah absen
-  if (attendanceData[currentDate][student.barcode]) {
-    showResultMessage(`⚠️ ${student.name} sudah absen hari ini!`, 'warning');
-    return;
-  }
-
-  // Catat absensi
-  recordAttendance(student.barcode, '1');
-  showResultMessage(`✅ ${student.name} berhasil absen!`, 'success');
+function onScanSuccess(decodedText, decodedResult) {
+  // Find student by barcode
+  const student = students.find(s => s.barcode === decodedText);
   
-  // Auto stop setelah 2 detik
-  setTimeout(stopScanning, 2000);
+  if (student) {
+    if (attendanceData[currentDate][student.barcode]) {
+      showResultMessage(`⚠️ ${student.name} sudah absen sebelumnya!`, 'warning');
+    } else {
+      recordAttendance(student.barcode, '1');
+      showResultMessage(`✅ ${student.name} berhasil absen!`, 'success');
+      
+      // Auto stop scanning after successful scan
+      setTimeout(() => {
+        stopScanning();
+      }, 2000);
+    }
+  } else {
+    showResultMessage('❌ Barcode tidak dikenali!', 'error');
+  }
+}
+
+function onScanFailure(error) {
+  // Handle scan failure silently - this is normal during scanning
 }
 
 function recordAttendance(barcode, status) {
@@ -268,11 +263,6 @@ function showResultMessage(message, type) {
   }, 3000);
 }
 
-function toggleScanButtons(isScanning) {
-  document.getElementById('startScanBtn').classList.toggle('hidden', isScanning);
-  document.getElementById('stopScanBtn').classList.toggle('hidden', !isScanning);
-}
-
 // Event Listeners
 function setupEventListeners() {
   // Tombol scanner
@@ -327,65 +317,11 @@ function exportAttendanceData() {
     ]);
   });
 
-  // Sheet 2: Rekap Bulanan
-  const month = new Date(currentDate).toLocaleString('id-ID', { month: 'long' });
-  const year = new Date(currentDate).getFullYear();
-  
-  const monthlyData = [
-    ["REKAP BULANAN ABSENSI"],
-    [`Kelas: XII IPA 1 | Bulan: ${month} ${year}`],
-    [],
-    ["No", "Nama Siswa", "ID", "Hadir", "Alpa", "Sakit", "Izin", "Persentase"]
-  ];
-
-  students.forEach((student, index) => {
-    const stats = calculateMonthlyStats(student.barcode, month, year);
-    monthlyData.push([
-      index + 1,
-      student.name,
-      student.id,
-      stats.present,
-      stats.absent,
-      stats.sick,
-      stats.permission,
-      `${Math.round((stats.present / stats.total) * 100)}%`
-    ]);
-  });
-
   const wsDaily = XLSX.utils.aoa_to_sheet(dailyData);
-  const wsMonthly = XLSX.utils.aoa_to_sheet(monthlyData);
-  
   XLSX.utils.book_append_sheet(wb, wsDaily, "Rekap Harian");
-  XLSX.utils.book_append_sheet(wb, wsMonthly, "Rekap Bulanan");
   
   const fileName = `Absensi_${currentDate.replace(/-/g, '')}.xlsx`;
   XLSX.writeFile(wb, fileName);
   
   showResultMessage(`📊 Data berhasil diekspor ke ${fileName}`, 'success');
-}
-
-function calculateMonthlyStats(barcode, month, year) {
-  let present = 0, absent = 0, sick = 0, permission = 0;
-  const targetMonth = new Date(`${month} 1, ${year}`).getMonth();
-
-  Object.entries(attendanceData).forEach(([date, records]) => {
-    const recordDate = new Date(date);
-    if (recordDate.getMonth() === targetMonth && recordDate.getFullYear() == year) {
-      const status = records[barcode]?.status || 'A';
-      switch(status) {
-        case '1': present++; break;
-        case 'A': absent++; break;
-        case 'S': sick++; break;
-        case 'I': permission++; break;
-      }
-    }
-  });
-
-  return {
-    present,
-    absent,
-    sick,
-    permission,
-    total: present + absent + sick + permission
-  };
 }
